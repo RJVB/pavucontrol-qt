@@ -369,60 +369,28 @@ void PVCApplication::ext_stream_restore_read_cb(
     w->updateRole(*i);
 }
 
-//     void PVCApplication::ext_stream_restore_subscribe_cb(pa_context *c)
-//     {
-//         pa_operation *o;
-// 
-//         // evoke the global ext_stream_restore_read_cb() handler with userdata=nullptr to signal
-//         // that we're running on the same thread;
-//         if (!(o = pa_ext_stream_restore_read(c, ::ext_stream_restore_read_cb, nullptr))) {
-//             show_translated_error("pa_ext_stream_restore_read() failed");
-//             return;
-//         }
-// 
-//         pa_operation_unref(o);
-//     }
 
-    void PVCApplication::ext_device_restore_read_cb(
-            const void *info,
-            int eol)
-    {
+void PVCApplication::ext_device_restore_read_cb(
+        const void *info,
+        int eol)
+{
 #if HAVE_EXT_DEVICE_RESTORE_API
-        if (eol < 0) {
-            dec_outstanding();
-            qDebug(tr("Failed to initialize device restore extension: %s").toUtf8().constData(), pa_strerror(pa_context_errno(context)));
-            return;
-        }
-
-        if (eol > 0) {
-            dec_outstanding();
-            return;
-        }
-
-        /* Do something with a widget when this part is written */
-        const pa_ext_device_restore_info *i = static_cast<const pa_ext_device_restore_info*>(info);
-        w->updateDeviceInfo(*i);
-#endif
+    if (eol < 0) {
+        dec_outstanding();
+        qDebug(tr("Failed to initialize device restore extension: %s").toUtf8().constData(), pa_strerror(pa_context_errno(context)));
+        return;
     }
 
-//     void PVCApplication::ext_device_restore_subscribe_cb(pa_context *c, pa_device_type_t type, uint32_t idx)
-//     {
-// #if HAVE_EXT_DEVICE_RESTORE_API
-//         pa_operation *o;
-// 
-//         if (type != PA_DEVICE_TYPE_SINK)
-//             return;
-// 
-//         // evoke the global ext_device_restore_read_cb() handler with userdata=nullptr to signal
-//         // that we're running on the same thread;
-//         if (!(o = pa_ext_device_restore_read_formats(c, type, idx, ::ext_device_restore_read_cb, nullptr))) {
-//             show_translated_error("pa_ext_device_restore_read_sink_formats() failed");
-//             return;
-//         }
-// 
-//         pa_operation_unref(o);
-// #endif
-//     }
+    if (eol > 0) {
+        dec_outstanding();
+        return;
+    }
+
+    /* Do something with a widget when this part is written */
+    const pa_ext_device_restore_info *i = static_cast<const pa_ext_device_restore_info*>(info);
+    w->updateDeviceInfo(*i);
+#endif
+}
 
 void PVCApplication::ext_device_manager_read_cb(int eol)
 {
@@ -444,17 +412,6 @@ void PVCApplication::ext_device_manager_read_cb(int eol)
     /* Do something with a widget when this part is written */
 }
 
-//     void PVCApplication::ext_device_manager_subscribe_cb(pa_context *c)
-//     {
-//         pa_operation *o;
-// 
-//         if (!(o = pa_ext_device_manager_read(c, ::ext_device_manager_read_cb, nullptr))) {
-//             show_translated_error("pa_ext_device_manager_read() failed");
-//             return;
-//         }
-// 
-//         pa_operation_unref(o);
-//     }
 
 void PVCApplication::removeSink(uint32_t index)
 {
@@ -529,8 +486,7 @@ void ext_stream_restore_read_cb(
         const pa_ext_stream_restore_info *i,
         int eol,
         void *userdata) {
-    // userdata can be NULL so check for that
-    PVCAPP_FUNCTION_CHECK(userdata, ext_stream_restore_read_cb(i, eol));
+    PVCAPP_FUNCTION(userdata, ext_stream_restore_read_cb(i, eol));
 }
 
 static void ext_stream_restore_subscribe_cb(pa_context *c, void *userdata) {
@@ -552,8 +508,7 @@ void ext_device_restore_read_cb(
         const pa_ext_device_restore_info *i,
         int eol,
         void *userdata) {
-    // userdata can be NULL so check for that
-    PVCAPP_FUNCTION_CHECK(userdata, ext_device_restore_read_cb(i,eol));
+    PVCAPP_FUNCTION(userdata, ext_device_restore_read_cb(i,eol));
 }
 
 static void ext_device_restore_subscribe_cb(pa_context *c, pa_device_type_t type, uint32_t idx, void *userdata) {
@@ -903,9 +858,20 @@ gboolean connect_to_pulse(gpointer userdata) {
             }
         }
     } else {
-#ifndef USE_THREADED_GLLOOP
-        // pump the GLib context until we've connected, before entering the Qt main loop.
+        // start (or pump) the GLib context until we've connected, before entering the Qt main loop.
         // Not necessary, but eliminates some GUI glitching on opening
+#ifdef USE_THREADED_GLLOOP
+            if (pa_threaded_mainloop_start(mainloop) >= 0)
+            {
+                for (;;)
+                {
+                    pa_context_state_t state = pa_context_get_state(context);
+                    if (state == PA_CONTEXT_READY || !PA_CONTEXT_IS_GOOD(state))
+                        break;
+                    pa_threaded_mainloop_wait(mainloop);
+                }
+            }
+#else
         auto gContext = g_main_context_default();
         for (;;)
         {
@@ -981,6 +947,7 @@ int main(int argc, char *argv[]) {
 #ifdef USE_THREADED_GLLOOP
     mainloop = pa_threaded_mainloop_new();
     g_assert(mainloop);
+    pa_threaded_mainloop_set_name(mainloop, "pvcqt's pa_threaded_mainloop");
     api = pa_threaded_mainloop_get_api(mainloop);
     g_assert(api);
 #else
@@ -992,9 +959,6 @@ int main(int argc, char *argv[]) {
 
     connect_to_pulse(&app);
     if (reconnect_timeout >= 0) {
-#ifdef USE_THREADED_GLLOOP
-        pa_threaded_mainloop_start(mainloop);
-#endif
         mainWindow->show();
         app.exec();
     }
@@ -1002,17 +966,13 @@ int main(int argc, char *argv[]) {
     if (reconnect_timeout < 0)
         show_translated_error("Fatal Error: Unable to connect to PulseAudio");
 
-// #ifdef USE_THREADED_GLLOOP
-//     pa_threaded_mainloop_stop(mainloop);
-//     pa_threaded_mainloop_free(mainloop);
-// #endif
-
     delete mainWindow;
 
     if (context) {
         pa_context_disconnect(context);
         pa_context_unref(context);
     }
+
 // Be nice and free the pa_glib_mainloop used with Qt's GLib-based event dispatcher.
 // Don't do the equivalent when using the pa_threaded_mainloop so it can do its own
 // cleanup/housekeeping (and we avoid instabilities on exit).
