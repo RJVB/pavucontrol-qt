@@ -330,15 +330,15 @@
          </widget>
         </widget>
        </item>
-       <item>
-        <widget class="QCheckBox" name="showVolumeMetersCheckButton">
-         <property name="text">
-          <string>Show volume meters</string>
-         </property>
-        </widget>
-       </item>
       </layout>
      </widget>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="showVolumeMetersCheckButton">
+     <property name="text">
+      <string>Show volume meters</string>
+     </property>
     </widget>
    </item>
    <item>
