@@ -4,7 +4,7 @@
 
 pavucontrol-qt is the Qt port of the volume control [pavucontrol](https://freedesktop.org/software/pulseaudio/pavucontrol/) for the sound server [PulseAudio](https://www.freedesktop.org/wiki/Software/PulseAudio/).   
 
-As such it can be used to adjust all controls provided by PulseAudio and ALSA as well as some additional settings.   
+As such it can be used to adjust all controls provided by PulseAudio (and ALSA, on Linux) as well as some additional settings.   
 
 The software belongs to the LXQt project but its usage isn't limited to this desktop environment.   
 
@@ -12,12 +12,14 @@ The software belongs to the LXQt project but its usage isn't limited to this des
 
 ### Compiling source code
 
-Runtime dependencies are qtbase and PulseAudio client library libpulse.   
-Additional build dependencies are CMake and [liblxqt](https://github.com/lxqt/liblxqt) as well as optionally Git to pull latest VCS checkouts. 
+Runtime dependencies are qtbase (Qt5) and PulseAudio client library libpulse.   
+Additional build dependencies are CMake as well as optionally Git to pull latest VCS checkouts. 
+On Mac, KDE's Extra-CMake-Modules and the ksvg2icns utility from KIconThemes are used to generate an application icon when they're installed. Alternatively a pre-generated icon is used.
 
 Code configuration is handled by CMake. CMake variable `CMAKE_INSTALL_PREFIX` has to be set to `/usr` on most operating systems.   
 
-To build run `make`, to install `make install` which accepts variable `DESTDIR` as usual.   
+To build run `make`, to install `make install` which accepts variable `DESTDIR` as usual.
+Other CMake generators can also be used, of course.
 
 ### Binary packages
 
