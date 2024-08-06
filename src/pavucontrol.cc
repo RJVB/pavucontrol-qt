@@ -35,8 +35,6 @@
 #include <pulse/ext-stream-restore.h>
 #include <pulse/ext-device-manager.h>
 
-// #include <canberra-gtk.h>
-
 #include "pavucontrol.h"
 #include "minimalstreamwidget.h"
 #include "channel.h"
@@ -124,6 +122,11 @@ void ext_device_restore_read_cb(
         const pa_ext_device_restore_info *i,
         int eol,
         void *userdata);
+static void ext_device_restore_subscribe_cb(
+        pa_context *c,
+        pa_device_type_t type,
+        uint32_t idx,
+        void *userdata);
 #endif
 void ext_device_manager_read_cb(
         pa_context *,
@@ -131,253 +134,254 @@ void ext_device_manager_read_cb(
         int eol,
         void *userdata);
 
-    PVCApplication::PVCApplication(int &argc, char **argv)
-        : QApplication(argc, argv)
-        , mainThread(QThread::currentThread())
-    {
-	   // I'd prefer to initialise PVCApplication::quitting elsewhere
-	   // but that would require C++17 apparently (instead of C++11).
-	   quitting = false;
-        gContext = g_main_context_default();
-        const auto dispatcher = eventDispatcher();
-        hasGlib = dispatcher && dispatcher->inherits("QEventDispatcherGlib");
-        qDebug() << Q_FUNC_INFO << "eventDispatcher:" << dispatcher << "hasGlib:" << hasGlib;
-        self = this;
-        connect(this, &QCoreApplication::aboutToQuit, this, &PVCApplication::willQuit);
-    }
+// ======= PVCApplication @implementation ======= //
+PVCApplication::PVCApplication(int &argc, char **argv)
+    : QApplication(argc, argv)
+    , mainThread(QThread::currentThread())
+{
+   // I'd prefer to initialise PVCApplication::quitting elsewhere
+   // but that would require C++17 apparently (instead of C++11).
+   quitting = false;
+    gContext = g_main_context_default();
+    const auto dispatcher = eventDispatcher();
+    hasGlib = dispatcher && dispatcher->inherits("QEventDispatcherGlib");
+    qDebug() << Q_FUNC_INFO << "eventDispatcher:" << dispatcher << "hasGlib:" << hasGlib;
+    self = this;
+    connect(this, &QCoreApplication::aboutToQuit, this, &PVCApplication::willQuit);
+}
 
 #ifdef DEBUG
-    QThread *PVCApplication::currentThread() const
-    {
-        return QThread::currentThread();
-    }
+QThread *PVCApplication::currentThread() const
+{
+    return QThread::currentThread();
+}
 #endif
 
-    // pure GUI functions:
+// pure GUI functions:
 
-    void PVCApplication::dec_outstanding()
-    {
-        if (n_outstanding <= 0)
+void PVCApplication::dec_outstanding()
+{
+    if (n_outstanding <= 0)
+        return;
+
+    if (--n_outstanding <= 0) {
+        // w->get_window()->set_cursor();
+        w->setConnectionState(true);
+    }
+}
+
+void PVCApplication::createEventRoleWidget()
+{
+    w->createEventRoleWidget();
+}
+
+void PVCApplication::setConnectionState(gboolean state)
+{
+    w->setConnectionState(state);
+}
+
+void PVCApplication::removeAllWidgets()
+{
+    w->removeAllWidgets();
+}
+
+void PVCApplication::updateDeviceVisibility()
+{
+    w->updateDeviceVisibility();
+}
+
+void PVCApplication::reset()
+{
+    w->setConnectionState(false);
+    w->removeAllWidgets();
+    w->updateDeviceVisibility();
+}
+
+void PVCApplication::willQuit()
+{
+    qDebug() << Q_FUNC_INFO << "!";
+    quitting = 1;
+}
+
+// implementations of libpulse callback functions:
+
+void PVCApplication::card_cb(const pa_card_info *i, int eol)
+{
+    if (eol < 0) {
+        if (pa_context_errno(context) == PA_ERR_NOENTITY)
             return;
 
-        if (--n_outstanding <= 0) {
-            // w->get_window()->set_cursor();
-            w->setConnectionState(true);
-        }
+        show_translated_error("Card callback failure");
+        return;
     }
 
-    void PVCApplication::createEventRoleWidget()
-    {
-        w->createEventRoleWidget();
-    }
-
-    void PVCApplication::setConnectionState(gboolean state)
-    {
-        w->setConnectionState(state);
-    }
-
-    void PVCApplication::removeAllWidgets()
-    {
-        w->removeAllWidgets();
-    }
-
-    void PVCApplication::updateDeviceVisibility()
-    {
-        w->updateDeviceVisibility();
-    }
-
-    void PVCApplication::reset()
-    {
-        w->setConnectionState(false);
-        w->removeAllWidgets();
-        w->updateDeviceVisibility();
-    }
-
-    void PVCApplication::willQuit()
-    {
-        qDebug() << Q_FUNC_INFO << "!";
-        quitting = 1;
-    }
-
-    // implementations of libpulse callback functions:
-
-    void PVCApplication::card_cb(const pa_card_info *i, int eol)
-    {
-        if (eol < 0) {
-            if (pa_context_errno(context) == PA_ERR_NOENTITY)
-                return;
-
-            show_translated_error("Card callback failure");
-            return;
-        }
-
-        if (eol > 0) {
-            dec_outstanding();
-            return;
-        }
-
-        w->updateCard(*i);
-    }
-
-    void PVCApplication::sink_cb(pa_context *c, const pa_sink_info *i, int eol)
-    {
-        if (eol < 0) {
-            if (pa_context_errno(context) == PA_ERR_NOENTITY)
-                return;
-
-            show_translated_error("Sink callback failure");
-            return;
-        }
-
-        if (eol > 0) {
-            dec_outstanding();
-            return;
-        }
-#if HAVE_EXT_DEVICE_RESTORE_API
-        if (w->updateSink(*i))
-            ext_device_restore_subscribe_cb(c, PA_DEVICE_TYPE_SINK, i->index);
-#else
-        w->updateSink(*i);
-#endif
-    }
-
-    void PVCApplication::source_cb(const pa_source_info *i, int eol)
-    {
-        if (eol < 0) {
-            if (pa_context_errno(context) == PA_ERR_NOENTITY)
-                return;
-
-            show_translated_error("Source callback failure");
-            return;
-        }
-
-        if (eol > 0) {
-            dec_outstanding();
-            return;
-        }
-
-        w->updateSource(*i);
-    }
-
-    void PVCApplication::sink_input_cb(const pa_sink_input_info *i, int eol)
-    {
-        if (eol < 0) {
-            if (pa_context_errno(context) == PA_ERR_NOENTITY)
-                return;
-
-            show_translated_error("Sink input callback failure");
-            return;
-        }
-
-        if (eol > 0) {
-            dec_outstanding();
-            return;
-        }
-
-        w->updateSinkInput(*i);
-    }
-
-    void PVCApplication::source_output_cb(const pa_source_output_info *i, int eol)
-    {
-        if (eol < 0) {
-            if (pa_context_errno(context) == PA_ERR_NOENTITY)
-                return;
-
-            show_translated_error("Source output callback failure");
-            return;
-        }
-
-        if (eol > 0)  {
-
-            if (n_outstanding > 0) {
-                /* At this point all notebook pages have been populated, so
-                 * let's open one that isn't empty */
-                if (default_tab != -1) {
-                    if (default_tab < 1 || default_tab > w->notebook->count()) {
-                        if (!w->sinkInputWidgets.empty())
-                            w->notebook->setCurrentIndex(0);
-                        else if (!w->sourceOutputWidgets.empty())
-                            w->notebook->setCurrentIndex(1);
-                        else if (!w->sourceWidgets.empty() && w->sinkWidgets.empty())
-                            w->notebook->setCurrentIndex(3);
-                        else
-                            w->notebook->setCurrentIndex(2);
-                    } else {
-                        w->notebook->setCurrentIndex(default_tab - 1);
-                    }
-                    default_tab = -1;
-                }
-            }
-
-            dec_outstanding();
-            return;
-        }
-
-        w->updateSourceOutput(*i);
-    }
-
-    void PVCApplication::client_cb(const pa_client_info *i, int eol)
-    {
-        if (eol < 0) {
-            if (pa_context_errno(context) == PA_ERR_NOENTITY)
-                return;
-
-            show_translated_error("Client callback failure");
-            return;
-        }
-
-        if (eol > 0) {
-            dec_outstanding();
-            return;
-        }
-
-        w->updateClient(*i);
-    }
-
-    void PVCApplication::server_info_cb(const pa_server_info *i)
-    {
-        if (!i) {
-            show_translated_error("Server info callback failure");
-            return;
-        }
-
-        w->updateServer(*i);
+    if (eol > 0) {
         dec_outstanding();
+        return;
     }
 
-    void PVCApplication::ext_stream_restore_read_cb(
-            const void *info,
-            int eol)
-    {
-        if (eol < 0) {
-            dec_outstanding();
-            qDebug(tr("Failed to initialize stream_restore extension: %s").toUtf8().constData(), pa_strerror(pa_context_errno(context)));
-            w->deleteEventRoleWidget();
-            return;
-        }
+    w->updateCard(*i);
+}
 
-        if (eol > 0) {
-            dec_outstanding();
+void PVCApplication::sink_cb(pa_context *c, const pa_sink_info *i, int eol)
+{
+    if (eol < 0) {
+        if (pa_context_errno(context) == PA_ERR_NOENTITY)
             return;
-        }
 
-        const pa_ext_stream_restore_info *i = static_cast<const pa_ext_stream_restore_info*>(info);
-        w->updateRole(*i);
+        show_translated_error("Sink callback failure");
+        return;
     }
 
-    void PVCApplication::ext_stream_restore_subscribe_cb(pa_context *c)
-    {
-        pa_operation *o;
+    if (eol > 0) {
+        dec_outstanding();
+        return;
+    }
+#if HAVE_EXT_DEVICE_RESTORE_API
+    if (w->updateSink(*i))
+        ext_device_restore_subscribe_cb(c, PA_DEVICE_TYPE_SINK, i->index, this);
+#else
+    w->updateSink(*i);
+#endif
+}
 
-        // evoke the global ext_stream_restore_read_cb() handler with userdata=nullptr to signal
-        // that we're running on the same thread;
-        if (!(o = pa_ext_stream_restore_read(c, ::ext_stream_restore_read_cb, nullptr))) {
-            show_translated_error("pa_ext_stream_restore_read() failed");
+void PVCApplication::source_cb(const pa_source_info *i, int eol)
+{
+    if (eol < 0) {
+        if (pa_context_errno(context) == PA_ERR_NOENTITY)
             return;
+
+        show_translated_error("Source callback failure");
+        return;
+    }
+
+    if (eol > 0) {
+        dec_outstanding();
+        return;
+    }
+
+    w->updateSource(*i);
+}
+
+void PVCApplication::sink_input_cb(const pa_sink_input_info *i, int eol)
+{
+    if (eol < 0) {
+        if (pa_context_errno(context) == PA_ERR_NOENTITY)
+            return;
+
+        show_translated_error("Sink input callback failure");
+        return;
+    }
+
+    if (eol > 0) {
+        dec_outstanding();
+        return;
+    }
+
+    w->updateSinkInput(*i);
+}
+
+void PVCApplication::source_output_cb(const pa_source_output_info *i, int eol)
+{
+    if (eol < 0) {
+        if (pa_context_errno(context) == PA_ERR_NOENTITY)
+            return;
+
+        show_translated_error("Source output callback failure");
+        return;
+    }
+
+    if (eol > 0)  {
+
+        if (n_outstanding > 0) {
+            /* At this point all notebook pages have been populated, so
+             * let's open one that isn't empty */
+            if (default_tab != -1) {
+                if (default_tab < 1 || default_tab > w->notebook->count()) {
+                    if (!w->sinkInputWidgets.empty())
+                        w->notebook->setCurrentIndex(0);
+                    else if (!w->sourceOutputWidgets.empty())
+                        w->notebook->setCurrentIndex(1);
+                    else if (!w->sourceWidgets.empty() && w->sinkWidgets.empty())
+                        w->notebook->setCurrentIndex(3);
+                    else
+                        w->notebook->setCurrentIndex(2);
+                } else {
+                    w->notebook->setCurrentIndex(default_tab - 1);
+                }
+                default_tab = -1;
+            }
         }
 
-        pa_operation_unref(o);
+        dec_outstanding();
+        return;
     }
+
+    w->updateSourceOutput(*i);
+}
+
+void PVCApplication::client_cb(const pa_client_info *i, int eol)
+{
+    if (eol < 0) {
+        if (pa_context_errno(context) == PA_ERR_NOENTITY)
+            return;
+
+        show_translated_error("Client callback failure");
+        return;
+    }
+
+    if (eol > 0) {
+        dec_outstanding();
+        return;
+    }
+
+    w->updateClient(*i);
+}
+
+void PVCApplication::server_info_cb(const pa_server_info *i)
+{
+    if (!i) {
+        show_translated_error("Server info callback failure");
+        return;
+    }
+
+    w->updateServer(*i);
+    dec_outstanding();
+}
+
+void PVCApplication::ext_stream_restore_read_cb(
+        const void *info,
+        int eol)
+{
+    if (eol < 0) {
+        dec_outstanding();
+        qDebug(tr("Failed to initialize stream_restore extension: %s").toUtf8().constData(), pa_strerror(pa_context_errno(context)));
+        w->deleteEventRoleWidget();
+        return;
+    }
+
+    if (eol > 0) {
+        dec_outstanding();
+        return;
+    }
+
+    const pa_ext_stream_restore_info *i = static_cast<const pa_ext_stream_restore_info*>(info);
+    w->updateRole(*i);
+}
+
+//     void PVCApplication::ext_stream_restore_subscribe_cb(pa_context *c)
+//     {
+//         pa_operation *o;
+// 
+//         // evoke the global ext_stream_restore_read_cb() handler with userdata=nullptr to signal
+//         // that we're running on the same thread;
+//         if (!(o = pa_ext_stream_restore_read(c, ::ext_stream_restore_read_cb, nullptr))) {
+//             show_translated_error("pa_ext_stream_restore_read() failed");
+//             return;
+//         }
+// 
+//         pa_operation_unref(o);
+//     }
 
     void PVCApplication::ext_device_restore_read_cb(
             const void *info,
@@ -401,84 +405,87 @@ void ext_device_manager_read_cb(
 #endif
     }
 
-    void PVCApplication::ext_device_restore_subscribe_cb(pa_context *c, pa_device_type_t type, uint32_t idx)
-    {
-#if HAVE_EXT_DEVICE_RESTORE_API
-        pa_operation *o;
+//     void PVCApplication::ext_device_restore_subscribe_cb(pa_context *c, pa_device_type_t type, uint32_t idx)
+//     {
+// #if HAVE_EXT_DEVICE_RESTORE_API
+//         pa_operation *o;
+// 
+//         if (type != PA_DEVICE_TYPE_SINK)
+//             return;
+// 
+//         // evoke the global ext_device_restore_read_cb() handler with userdata=nullptr to signal
+//         // that we're running on the same thread;
+//         if (!(o = pa_ext_device_restore_read_formats(c, type, idx, ::ext_device_restore_read_cb, nullptr))) {
+//             show_translated_error("pa_ext_device_restore_read_sink_formats() failed");
+//             return;
+//         }
+// 
+//         pa_operation_unref(o);
+// #endif
+//     }
 
-        if (type != PA_DEVICE_TYPE_SINK)
-            return;
-
-        // evoke the global ext_device_restore_read_cb() handler with userdata=nullptr to signal
-        // that we're running on the same thread;
-        if (!(o = pa_ext_device_restore_read_formats(c, type, idx, ::ext_device_restore_read_cb, nullptr))) {
-            show_translated_error("pa_ext_device_restore_read_sink_formats() failed");
-            return;
-        }
-
-        pa_operation_unref(o);
-#endif
+void PVCApplication::ext_device_manager_read_cb(int eol)
+{
+    if (eol < 0) {
+        dec_outstanding();
+        qDebug(tr("Failed to initialize device manager extension: %s").toUtf8().constData(), pa_strerror(pa_context_errno(context)));
+        return;
     }
 
-    void PVCApplication::ext_device_manager_read_cb(int eol)
-    {
-        if (eol < 0) {
-            dec_outstanding();
-            qDebug(tr("Failed to initialize device manager extension: %s").toUtf8().constData(), pa_strerror(pa_context_errno(context)));
-            return;
-        }
+    w->canRenameDevices = true;
 
-        w->canRenameDevices = true;
-
-        if (eol > 0) {
-            dec_outstanding();
-            return;
-        }
-
-        /* Do something with a widget when this part is written */
+    if (eol > 0) {
+        dec_outstanding();
+        return;
     }
 
-    void PVCApplication::ext_device_manager_subscribe_cb(pa_context *c)
-    {
-        pa_operation *o;
+    // TODO: does this function really have to be executed on the main thread
+    // as long as the comment below is outstanding?
+    /* Do something with a widget when this part is written */
+}
 
-        if (!(o = pa_ext_device_manager_read(c, ::ext_device_manager_read_cb, nullptr))) {
-            show_translated_error("pa_ext_device_manager_read() failed");
-            return;
-        }
+//     void PVCApplication::ext_device_manager_subscribe_cb(pa_context *c)
+//     {
+//         pa_operation *o;
+// 
+//         if (!(o = pa_ext_device_manager_read(c, ::ext_device_manager_read_cb, nullptr))) {
+//             show_translated_error("pa_ext_device_manager_read() failed");
+//             return;
+//         }
+// 
+//         pa_operation_unref(o);
+//     }
 
-        pa_operation_unref(o);
-    }
+void PVCApplication::removeSink(uint32_t index)
+{
+    w->removeSink(index);
+}
 
-    void PVCApplication::removeSink(uint32_t index)
-    {
-        w->removeSink(index);
-    }
+void PVCApplication::removeSource(uint32_t index)
+{
+    w->removeSource(index);
+}
 
-    void PVCApplication::removeSource(uint32_t index)
-    {
-        w->removeSource(index);
-    }
+void PVCApplication::removeSinkInput(uint32_t index)
+{
+    w->removeSinkInput(index);
+}
 
-    void PVCApplication::removeSinkInput(uint32_t index)
-    {
-        w->removeSinkInput(index);
-    }
+void PVCApplication::removeSourceOutput(uint32_t index)
+{
+    w->removeSourceOutput(index);
+}
 
-    void PVCApplication::removeSourceOutput(uint32_t index)
-    {
-        w->removeSourceOutput(index);
-    }
+void PVCApplication::removeClient(uint32_t index)
+{
+    w->removeClient(index);
+}
 
-    void PVCApplication::removeClient(uint32_t index)
-    {
-        w->removeClient(index);
-    }
-
-    void PVCApplication::removeCard(uint32_t index)
-    {
-        w->removeCard(index);
-    }
+void PVCApplication::removeCard(uint32_t index)
+{
+    w->removeCard(index);
+}
+// ======= PVCApplication end @implementation ======= //
 
 
 void card_cb(pa_context *, const pa_card_info *i, int eol, void *userdata) {
@@ -527,7 +534,16 @@ void ext_stream_restore_read_cb(
 }
 
 static void ext_stream_restore_subscribe_cb(pa_context *c, void *userdata) {
-    PVCAPP_FUNCTION(userdata, ext_stream_restore_subscribe_cb(c));
+    // doesn't interact with the GUI directly so can be executed
+    // on the same thread as the pa_?_mainloop.
+    pa_operation *o;
+
+    if (!(o = pa_ext_stream_restore_read(c, ext_stream_restore_read_cb, userdata))) {
+        show_translated_error("pa_ext_stream_restore_read() failed");
+        return;
+    }
+
+    pa_operation_unref(o);
 }
 
 #if HAVE_EXT_DEVICE_RESTORE_API
@@ -541,7 +557,21 @@ void ext_device_restore_read_cb(
 }
 
 static void ext_device_restore_subscribe_cb(pa_context *c, pa_device_type_t type, uint32_t idx, void *userdata) {
-    PVCAPP_FUNCTION(userdata, ext_device_restore_subscribe_cb(c, type, idx));
+    // doesn't interact with the GUI directly so can be executed
+    // on the same thread as the pa_?_mainloop.
+    pa_operation *o;
+
+    if (type != PA_DEVICE_TYPE_SINK)
+        return;
+
+    // evoke the global ext_device_restore_read_cb() handler with userdata=nullptr to signal
+    // that we're running on the same thread;
+    if (!(o = pa_ext_device_restore_read_formats(c, type, idx, ext_device_restore_read_cb, userdata))) {
+        show_translated_error("pa_ext_device_restore_read_sink_formats() failed");
+        return;
+    }
+
+    pa_operation_unref(o);
 }
 #endif
 
@@ -555,7 +585,17 @@ void ext_device_manager_read_cb(
 }
 
 static void ext_device_manager_subscribe_cb(pa_context *c, void *userdata) {
-    PVCAPP_FUNCTION(userdata, ext_device_manager_subscribe_cb(c));
+//     PVCAPP_FUNCTION(userdata, ext_device_manager_subscribe_cb(c));
+    // doesn't interact with the GUI directly so can be executed
+    // on the same thread as the pa_?_mainloop.
+    pa_operation *o;
+
+    if (!(o = pa_ext_device_manager_read(c, ext_device_manager_read_cb, userdata))) {
+        show_translated_error("pa_ext_device_manager_read() failed");
+        return;
+    }
+
+    pa_operation_unref(o);
 }
 
 // toplevel subscription/interface callback. It contains more calls into PA code that require

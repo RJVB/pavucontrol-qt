@@ -151,16 +151,16 @@ public slots:
     void ext_stream_restore_read_cb(
             const void *info,
             int eol);
-    void ext_stream_restore_subscribe_cb(pa_context *c);
-    // the next 2 slots only do something when HAVE_EXT_DEVICE_RESTORE_API
+//     void ext_stream_restore_subscribe_cb(pa_context *c);
+    // the next slot only does something when HAVE_EXT_DEVICE_RESTORE_API
     void ext_device_restore_read_cb(
             const void *info,
             int eol);
-    void ext_device_restore_subscribe_cb(pa_context *c, pa_device_type_t type, uint32_t idx);
+//     void ext_device_restore_subscribe_cb(pa_context *c, pa_device_type_t type, uint32_t idx);
     // end HAVE_EXT_DEVICE_RESTORE_API
 
     void ext_device_manager_read_cb(int eol);
-    void ext_device_manager_subscribe_cb(pa_context *c);
+//     void ext_device_manager_subscribe_cb(pa_context *c);
     void removeSink(uint32_t index);
     void removeSource(uint32_t index);
     void removeSinkInput(uint32_t index);
