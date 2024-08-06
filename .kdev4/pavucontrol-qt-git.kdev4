@@ -1,0 +1,69 @@
+[Buildset]
+BuildItems=@Variant(\x00\x00\x00\t\x00\x00\x00\x00\x00)
+
+[CMake]
+Build Directory Count=1
+Current Build Directory Index=0
+
+[CMake][CMake Build Directory 0]
+Build Directory Path=/home/bertin/work/src/Scratch/multimedia/qtpavucontrol-lnx-work/build
+Build Type=MacPorts
+CMake Binary=/opt/local/bin/cmake2port_noserver
+CMake Executable=/opt/local/bin/cmake2port_noserver
+Environment Profile=
+Extra Arguments=-nvok --port pavucontrol-qt5 --variants +LTO+cpucompat --configure.optflags "-Ofast" configure.compiler=macports-gcc-12 configureccache=yes
+Install Directory=/opt/local
+Runtime=Host System
+
+[CustomDefinesAndIncludes][ProjectPath0]
+Path=.
+parseAmbiguousAsCPP=true
+parserArguments=-ferror-limit=100 -fspell-checking -Wdocumentation -Wunused-parameter -Wunreachable-code -Wall -std=c++17
+parserArgumentsC=-ferror-limit=100 -fspell-checking -Wdocumentation -Wunused-parameter -Wunreachable-code -Wall -std=c99
+parserArgumentsCuda=-ferror-limit=100 -fspell-checking -Wdocumentation -Wunused-parameter -Wunreachable-code -Wall -std=c++11
+parserArgumentsOpenCL=-ferror-limit=100 -fspell-checking -Wdocumentation -Wunused-parameter -Wunreachable-code -Wall -cl-std=CL1.1
+
+[CustomDefinesAndIncludes][ProjectPath0][Compiler]
+Name=gcc-mp-12
+
+[CustomDefinesAndIncludes][ProjectPath0][Includes]
+1=/opt/local/include/qt5
+2=/home/bertin/work/src/Scratch/multimedia/pavucontrol-qt-git/src
+3=/opt/local/include/qt5/QtWidgets
+4=/opt/local/include/qt5/QtGui/
+5=/opt/local/include/qt5/QtCore
+6=/home/bertin/work/src/Scratch/multimedia/pavucontrol-qt-git/../qtpavucontrol-lnx-work/build/src/pavucontrol-qt_autogen/include/
+
+[Launch]
+Launch Configurations=Launch Configuration 0
+
+[Launch][Launch Configuration 0]
+Configured Launch Modes=execute
+Configured Launchers=nativeAppLauncher
+Name=QMPlay2
+Type=Native Application
+
+[MakeBuilder]
+Additional Options=--nice 10 -w V=1 VERBOSE=1
+Default Make Environment Profile=KF5/MacPorts
+Make Binary=wmake
+
+[NinjaBuilder]
+Additional Options=-v
+Override Number Of Jobs=true
+
+[Project]
+VersionControlSupport=kdevgit
+
+[SourceFormatter]
+OverrideKateIndentation=true
+UseDefault=false
+text/x-c++hdr=kdevastyle||User4
+text/x-c++src=kdevastyle||User4
+text/x-chdr=kdevastyle||User4
+text/x-csharp=kdevastyle||1TBS
+text/x-csrc=kdevastyle||User4
+text/x-java=kdevastyle||1TBS
+text/x-objc++src=kdevastyle||User4
+text/x-objchdr=kdevastyle||1TBS
+text/x-objcsrc=kdevastyle||1TBS

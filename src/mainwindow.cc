@@ -22,6 +22,8 @@
 #include <config.h>
 #endif
 
+#define NEEDS_PCVAPP_FUNCTIONS
+
 #include <set>
 
 #include "mainwindow.h"
@@ -34,6 +36,8 @@
 #include <QIcon>
 #include <QStyle>
 #include <QSettings>
+#include <QThread>
+#include <QDebug>
 
 /* Used for profile sorting */
 struct profile_prio_compare {
@@ -91,7 +95,7 @@ MainWindow::MainWindow():
     connect(showVolumeMetersCheckButton, &QCheckBox::toggled, this, &MainWindow::onShowVolumeMetersCheckButtonToggled);
 
     QAction * quit = new QAction{this};
-    connect(quit, &QAction::triggered, this, &QWidget::close);
+    connect(quit, &QAction::triggered, this, &MainWindow::doQuit);
     quit->setShortcut(QKeySequence::Quit);
     addAction(quit);
 
@@ -138,6 +142,19 @@ MainWindow::~MainWindow() {
         g_free(i->second);
         clientNames.erase(i);
     }
+}
+
+void MainWindow::doQuit()
+{
+#ifdef USE_THREADED_GLLOOP
+    if (QThread::currentThread() == pvcApp->mainThread) {
+        close();
+    } else {
+        MAINWINDOW_FUNCTION(this, close());
+    }
+#else
+    close();
+#endif
 }
 
 class DeviceWidget;
@@ -375,19 +392,27 @@ bool MainWindow::updateSink(const pa_sink_info &info) {
 }
 
 static void suspended_callback(pa_stream *s, void *userdata) {
-    MainWindow *w = static_cast<MainWindow*>(userdata);
 
+#ifdef USE_THREADED_GLLOOP
+    if (PVCApplication::isQuitting()) {
+        return;
+    }
+#endif
     if (pa_stream_is_suspended(s))
-        w->updateVolumeMeter(pa_stream_get_device_index(s), PA_INVALID_INDEX, -1);
+        MAINWINDOW_FUNCTION(userdata, updateVolumeMeter(pa_stream_get_device_index(s), PA_INVALID_INDEX, -1));
 }
 
 static void read_callback(pa_stream *s, size_t length, void *userdata) {
-    MainWindow *w = static_cast<MainWindow*>(userdata);
     const void *data;
     double v;
 
+#ifdef USE_THREADED_GLLOOP
+    if (PVCApplication::isQuitting()) {
+        return;
+    }
+#endif
     if (pa_stream_peek(s, &data, &length) < 0) {
-        show_error(MainWindow::tr("Failed to read data from stream").toUtf8().constData());
+        show_translated_error("Failed to read data from stream");
         return;
     }
 
@@ -411,7 +436,7 @@ static void read_callback(pa_stream *s, size_t length, void *userdata) {
     if (v > 1)
         v = 1;
 
-    w->updateVolumeMeter(pa_stream_get_device_index(s), pa_stream_get_monitor_stream(s), v);
+    MAINWINDOW_FUNCTION(userdata, updateVolumeMeter(pa_stream_get_device_index(s), pa_stream_get_monitor_stream(s), v));
 }
 
 pa_stream* MainWindow::createMonitorStreamForSource(uint32_t source_idx, uint32_t stream_idx = -1, bool suspend = false) {
@@ -421,6 +446,12 @@ pa_stream* MainWindow::createMonitorStreamForSource(uint32_t source_idx, uint32_
     pa_sample_spec ss;
     pa_stream_flags_t flags;
 
+#ifdef USE_THREADED_GLLOOP
+    // just checking to be certain
+    if (QThread::currentThread() != pvcApp->mainThread) {
+        qWarning() << Q_FUNC_INFO << "thread" << QThread::currentThread() << "!= mainThread" << pvcApp->mainThread;
+    }
+#endif
     ss.channels = 1;
     ss.format = PA_SAMPLE_FLOAT32;
     ss.rate = 25;
@@ -432,22 +463,22 @@ pa_stream* MainWindow::createMonitorStreamForSource(uint32_t source_idx, uint32_
     snprintf(t, sizeof(t), "%u", source_idx);
 
     if (!(s = pa_stream_new(get_context(), tr("Peak detect").toUtf8().constData(), &ss, nullptr))) {
-        show_error(tr("Failed to create monitoring stream").toUtf8().constData());
+        show_translated_error("Failed to create monitoring stream");
         return nullptr;
     }
 
     if (stream_idx != (uint32_t) -1)
         pa_stream_set_monitor_stream(s, stream_idx);
 
-    pa_stream_set_read_callback(s, read_callback, this);
-    pa_stream_set_suspended_callback(s, suspended_callback, this);
+    pa_stream_set_read_callback(s, ::read_callback, this);
+    pa_stream_set_suspended_callback(s, ::suspended_callback, this);
 
     flags = (pa_stream_flags_t) (PA_STREAM_DONT_MOVE | PA_STREAM_PEAK_DETECT | PA_STREAM_ADJUST_LATENCY |
                                  (suspend ? PA_STREAM_DONT_INHIBIT_AUTO_SUSPEND : PA_STREAM_NOFLAGS) |
                                  (!showVolumeMetersCheckButton->isChecked() ? PA_STREAM_START_CORKED : PA_STREAM_NOFLAGS));
 
     if (pa_stream_connect_record(s, t, &attr, flags) < 0) {
-        show_error(tr("Failed to connect monitoring stream").toUtf8().constData());
+        show_translated_error("Failed to connect monitoring stream");
         pa_stream_unref(s);
         return nullptr;
     }
@@ -587,7 +618,7 @@ void MainWindow::updateSinkInput(const pa_sink_input_info &info) {
 
     if ((t = pa_proplist_gets(info.proplist, "module-stream-restore.id"))) {
         if (strcmp(t, "sink-input-by-media-role:event") == 0) {
-            g_debug("%s", tr("Ignoring sink-input due to it being designated as an event and thus handled by the Event widget").toUtf8().constData());
+            qDebug() << tr("Ignoring sink-input due to it being designated as an event and thus handled by the Event widget");;
             return;
         }
     }

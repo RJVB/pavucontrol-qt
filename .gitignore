@@ -3,3 +3,5 @@ build
 .deps
 *.tar.gz
 *.swp
+*.orig
+*.rej

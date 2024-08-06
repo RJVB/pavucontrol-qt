@@ -85,6 +85,7 @@ protected Q_SLOTS:
     virtual void onSinkTypeComboBoxChanged(int index);
     virtual void onSourceTypeComboBoxChanged(int index);
     virtual void onShowVolumeMetersCheckButtonToggled(bool toggled);
+    void doQuit();
 
 public:
     void setConnectionState(gboolean connected);
@@ -109,5 +110,24 @@ private:
     gchar* m_config_filename;
 };
 
+#ifdef USE_THREADED_GLLOOP
+#ifdef NEEDS_INVOKE_METHOD_FUNCTOR
+// The PVCApplication class has an invokeMethod() function that accepts lambda
+// expression, so evoke MainWindow::${fun} through PVCApplication::mainWindow().
+#define MAINWINDOW_FUNCTION(ptr,fnc) { \
+    INVOKE_METHOD(pvcApp, [=]() { pvcApp->mainWindow()-> fnc ; }); \
+}
+#else
+#define MAINWINDOW_FUNCTION(ptr,fnc) { \
+    MainWindow *w = static_cast<MainWindow*>(ptr); \
+    QMetaObject::invokeMethod(w, [=]() { w-> fnc ; }, Qt::BlockingQueuedConnection); \
+}
+#endif
+#else
+#define MAINWINDOW_FUNCTION(ptr,fnc) { \
+    MainWindow *w = static_cast<MainWindow*>(ptr); \
+    w-> fnc ; \
+}
+#endif
 
 #endif

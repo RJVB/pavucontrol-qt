@@ -1,6 +1,6 @@
 [Desktop Entry]
 Version=1.0
-Exec=pavucontrol-qt
+Exec=pavucontrol-qt5 --tab 1
 Icon=multimedia-volume-control
 StartupNotify=true
 Type=Application

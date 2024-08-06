@@ -16,14 +16,14 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 
 include(GNUInstallDirs)
+include(FeatureSummary)
 
 # Minimum Versions
 set(GLIB_MINIMUM_VERSION "2.50.0")
 set(LXQTBT_MINIMUM_VERSION "0.13.0")
-set(QT_MINIMUM_VERSION "5.15.0")
+set(QT_MINIMUM_VERSION "5.6.3")
 
-find_package(Qt5Widgets ${QT_MINIMUM_VERSION} REQUIRED)
-find_package(Qt5LinguistTools ${QT_MINIMUM_VERSION} REQUIRED)
+find_package(Qt5 ${QT_MINIMUM_VERSION} REQUIRED Widgets LinguistTools)
 find_package(lxqt-build-tools ${LXQTBT_MINIMUM_VERSION} REQUIRED)
 
 find_package(GLIB ${GLIB_MINIMUM_VERSION} REQUIRED)
@@ -38,6 +38,19 @@ include(LXQtPreventInSourceBuilds)
 include(LXQtCompilerSettings NO_POLICY_SCOPE)
 include(LXQtTranslate)
 
+if (APPLE)
+    find_package(ECM ${KF5_DEP_VERSION} NO_MODULE)
+    if (ECM_FOUND)
+        list(APPEND CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+        find_package(KF5IconThemes 5.54.0 QUIET)
+        if (KF5IconThemes_FOUND)
+            set_package_properties(KF5IconThemes PROPERTIES
+                DESCRIPTION "For the ksvg2icns utility")
+            include(ECMAddAppIcon)
+        endif()
+    endif()
+endif()
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(
     PULSE REQUIRED
@@ -46,3 +59,5 @@ pkg_check_modules(
 )
 
 add_subdirectory(src)
+
+feature_summary(WHAT ALL   FATAL_ON_MISSING_REQUIRED_PACKAGES)
