@@ -110,11 +110,12 @@ private:
     gchar* m_config_filename;
 };
 
-#ifdef USE_THREADED_GLLOOP
+#ifdef USE_THREADED_PALOOP
 #ifdef NEEDS_INVOKE_METHOD_FUNCTOR
 // The PVCApplication class has an invokeMethod() function that accepts lambda
 // expression, so evoke MainWindow::${fun} through PVCApplication::mainWindow().
 #define MAINWINDOW_FUNCTION(ptr,fnc) { \
+    Q_UNUSED(ptr); \
     INVOKE_METHOD(pvcApp, [=]() { pvcApp->mainWindow()-> fnc ; }); \
 }
 #else

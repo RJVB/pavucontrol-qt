@@ -27,7 +27,7 @@
 #define PACKAGE_VERSION "0.1"
 
 #include <pulse/pulseaudio.h>
-#ifdef USE_THREADED_GLLOOP
+#ifdef USE_THREADED_PALOOP
 #include <pulse/thread-mainloop.h>
 #else
 #include <pulse/glib-mainloop.h>
@@ -63,9 +63,7 @@
 #include <atomic>
 
 static pa_context* context = nullptr;
-#ifdef USE_THREADED_GLLOOP
-static pa_threaded_mainloop *mainloop = nullptr;
-#endif
+struct pa_threaded_mainloop *PVCApplication::pa_mainloop = nullptr;
 static pa_mainloop_api* api = nullptr;
 static std::atomic<int> n_outstanding;
 static int default_tab = 0;
@@ -77,7 +75,7 @@ std::atomic<bool> PVCApplication::quitting;
 
 void show_translated_error(const char *txt)
 {
-#ifdef USE_THREADED_GLLOOP
+#ifdef USE_THREADED_PALOOP
     if (QThread::currentThread() != pvcApp->mainThread) {
         // we need to execute on the main thread
         INVOKE_METHOD(pvcApp, [=]() { pvcApp->show_translated_error(txt); });
@@ -94,7 +92,7 @@ void show_translated_error(const char *txt)
 }
 
 void show_error(const char *txt) {
-#ifdef USE_THREADED_GLLOOP
+#ifdef USE_THREADED_PALOOP
     if (QThread::currentThread() != pvcApp->mainThread) {
         // we need to execute on the main thread
         INVOKE_METHOD(pvcApp, [=]() { pvcApp->show_error(txt); });
@@ -141,7 +139,7 @@ PVCApplication::PVCApplication(int &argc, char **argv)
 {
    // I'd prefer to initialise PVCApplication::quitting elsewhere
    // but that would require C++17 apparently (instead of C++11).
-   quitting = false;
+    quitting = false;
     gContext = g_main_context_default();
     const auto dispatcher = eventDispatcher();
     hasGlib = dispatcher && dispatcher->inherits("QEventDispatcherGlib");
@@ -200,6 +198,9 @@ void PVCApplication::reset()
 void PVCApplication::willQuit()
 {
     qDebug() << Q_FUNC_INFO << "!";
+#ifdef USE_THREADED_PALOOP
+    pa_mainloop = nullptr;
+#endif
     quitting = 1;
 }
 
@@ -448,7 +449,7 @@ void PVCApplication::removeCard(uint32_t index)
 void card_cb(pa_context *, const pa_card_info *i, int eol, void *userdata) {
     PVCAPP_FUNCTION(userdata, card_cb(i, eol));
 // PVCAPP_FUNCTION expands to:
-// #ifdef USE_THREADED_GLLOOP
+// #ifdef USE_THREADED_PALOOP
 //     PVCApplication *app = static_cast<PVCApplication*>(userdata);
 //     QMetaObject::invokeMethod(app, [=]() { app->card_cb(i, eol); }, PVCConnection);
 // #else
@@ -860,15 +861,15 @@ gboolean connect_to_pulse(gpointer userdata) {
     } else {
         // start (or pump) the GLib context until we've connected, before entering the Qt main loop.
         // Not necessary, but eliminates some GUI glitching on opening
-#ifdef USE_THREADED_GLLOOP
-            if (pa_threaded_mainloop_start(mainloop) >= 0)
+#ifdef USE_THREADED_PALOOP
+            if (pa_threaded_mainloop_start(pvcApp->paMainLoop()) >= 0)
             {
                 for (;;)
                 {
                     pa_context_state_t state = pa_context_get_state(context);
                     if (state == PA_CONTEXT_READY || !PA_CONTEXT_IS_GOOD(state))
                         break;
-                    pa_threaded_mainloop_wait(mainloop);
+                    pa_threaded_mainloop_wait(pvcApp->paMainLoop());
                 }
             }
 #else
@@ -944,11 +945,11 @@ int main(int argc, char *argv[]) {
 
     app.setMainWindow(mainWindow);
 
-#ifdef USE_THREADED_GLLOOP
-    mainloop = pa_threaded_mainloop_new();
-    g_assert(mainloop);
-    pa_threaded_mainloop_set_name(mainloop, "pvcqt's pa_threaded_mainloop");
-    api = pa_threaded_mainloop_get_api(mainloop);
+#ifdef USE_THREADED_PALOOP
+    pvcApp->setPAMainLoop(pa_threaded_mainloop_new());
+    g_assert(pvcApp->paMainLoop());
+    pa_threaded_mainloop_set_name(pvcApp->paMainLoop(), "pvcqt's pa_threaded_mainloop");
+    api = pa_threaded_mainloop_get_api(pvcApp->paMainLoop());
     g_assert(api);
 #else
     pa_glib_mainloop *m = pa_glib_mainloop_new(g_main_context_default());
@@ -976,7 +977,7 @@ int main(int argc, char *argv[]) {
 // Be nice and free the pa_glib_mainloop used with Qt's GLib-based event dispatcher.
 // Don't do the equivalent when using the pa_threaded_mainloop so it can do its own
 // cleanup/housekeeping (and we avoid instabilities on exit).
-#ifndef USE_THREADED_GLLOOP
+#ifndef USE_THREADED_PALOOP
     pa_glib_mainloop_free(m);
 #endif
 

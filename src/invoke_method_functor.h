@@ -12,7 +12,7 @@
 // provides the required functionalities.
 
     template <typename F>
-    void invokeMethod(F && fun)
+    void invokeMethod(F && fun, bool blocking)
     {
 #ifdef DEBUG
         auto name = typeid(fun).name();
@@ -34,20 +34,24 @@
             fun();
         } else {
 #ifdef NEEDS_INVOKE_METHOD_FUNCTOR
-            QSemaphore sem;
+            if (blocking) {
+                QSemaphore sem;
 #   ifdef DEBUG
-            qDebug() << "invoking" << name << "on the main thread";
+                qDebug() << "invoking" << name << "on the main thread";
 #   endif
-            postEvent(this, new FunctorEvent<F>(std::forward<F>(fun), &sem));
-            sem.acquire();
+                postEvent(this, new FunctorEvent<F>(std::forward<F>(fun), &sem));
+                sem.acquire();
 #   ifdef DEBUG
-            qDebug() << name << "done";
+                qDebug() << name << "done";
 #   endif
+            } else {
+                postEvent(this, new FunctorEvent<F>(std::forward<F>(fun)));
+            }
 #else // NEEDS_INVOKE_METHOD_FUNCTOR
 #   ifdef DEBUG
             qDebug() << "invoking" << name << "on the main thread";
 #   endif
-            QMetaObject::invokeMethod(this, fun, Qt::BlockingQueuedConnection);
+            QMetaObject::invokeMethod(this, fun, blocking ? Qt::BlockingQueuedConnection : Qt::QueuedConnection);
 #   ifdef DEBUG
             qDebug() << name << "done";
 #   endif

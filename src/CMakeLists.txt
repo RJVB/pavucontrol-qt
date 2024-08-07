@@ -75,7 +75,7 @@ if (APPLE)
     set_property(SOURCE
         pavucontrol.cc
         mainwindow.cc
-        APPEND PROPERTY COMPILE_DEFINITIONS USE_THREADED_GLLOOP)
+        APPEND PROPERTY COMPILE_DEFINITIONS USE_THREADED_PALOOP)
 endif()
 
 add_executable(pavucontrol-qt

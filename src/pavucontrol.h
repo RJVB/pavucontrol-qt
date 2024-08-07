@@ -90,7 +90,9 @@ class PVCApplication : public QApplication
 {
     Q_OBJECT
 public:
+
     PVCApplication(int &argc, char **argv);
+
     void setMainWindow(MainWindow *window)
     {
         w = window;
@@ -119,7 +121,17 @@ public:
     QThread *currentThread() const;
 #endif
 
+    void setPAMainLoop(struct pa_threaded_mainloop *loop)
+    {
+        pa_mainloop = loop;
+    }
+    struct pa_threaded_mainloop *paMainLoop() const
+    {
+        return pa_mainloop;
+    }
+
 public slots:
+
     // pure GUI functions:
 
     void show_error(const char *txt)
@@ -177,17 +189,22 @@ private:
     MainWindow *w;
     static PVCApplication *self;
     static std::atomic<bool> quitting;
+
+    // only set when using a pa_threaded_mainloop, i.e. when built with USE_THREADED_PALOOP
+    static struct pa_threaded_mainloop *pa_mainloop;
 };
 
 #ifdef NEEDS_PCVAPP_FUNCTIONS
 
 #ifdef NEEDS_INVOKE_METHOD_FUNCTOR
-#define INVOKE_METHOD(app,fnc) app->invokeMethod(fnc)
+#define INVOKE_METHOD(app,fnc) app->invokeMethod(fnc, true)
+#define INVOKE_METHOD_ASYNC(app,fnc) app->invokeMethod(fnc, false)
 #else
 #define INVOKE_METHOD(app,fnc) QMetaObject::invokeMethod(app, fnc, PVCConnection)
+#define INVOKE_METHOD_ASYNC(app,fnc) QMetaObject::invokeMethod(app, fnc, Qt::QueuedConnection)
 #endif
 
-#ifdef USE_THREADED_GLLOOP
+#ifdef USE_THREADED_PALOOP
 #define PVCAPP_FUNCTION(ptr,fnc) { \
     PVCApplication *app = static_cast<PVCApplication*>(ptr); \
     INVOKE_METHOD(app, [=]() { app-> fnc ; }); \
@@ -219,7 +236,7 @@ private:
     pvcApp-> fnc ; \
 }
 #define PVCAPP_FUNCTION_CHECK(ptr,fnc) PVCAPP_FUNCTION(ptr,fnc)
-#endif // USE_THREADED_GLLOOP
+#endif // USE_THREADED_PALOOP
 #endif // NEEDS_PCVAPP_FUNCTIONS
 
 

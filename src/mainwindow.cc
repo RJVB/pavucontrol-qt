@@ -37,6 +37,9 @@
 #include <QStyle>
 #include <QSettings>
 #include <QThread>
+#ifdef USE_THREADED_PALOOP
+#include <QAbstractEventDispatcher>
+#endif
 #include <QDebug>
 
 /* Used for profile sorting */
@@ -69,6 +72,11 @@ struct source_port_prio_compare {
         return lhs.priority > rhs.priority;
     }
 };
+
+#ifdef DEBUG
+#include <QElapsedTimer>
+QElapsedTimer idleTimer;
+#endif
 
 MainWindow::MainWindow():
     QDialog(),
@@ -126,6 +134,9 @@ MainWindow::MainWindow():
     /* Hide first and show when we're connected */
     notebook->hide();
     connectingLabel->show();
+#ifdef DEBUG
+    idleTimer.start();
+#endif
 }
 
 MainWindow::~MainWindow() {
@@ -146,7 +157,7 @@ MainWindow::~MainWindow() {
 
 void MainWindow::doQuit()
 {
-#ifdef USE_THREADED_GLLOOP
+#ifdef USE_THREADED_PALOOP
     if (QThread::currentThread() == pvcApp->mainThread) {
         close();
     } else {
@@ -392,8 +403,7 @@ bool MainWindow::updateSink(const pa_sink_info &info) {
 }
 
 static void suspended_callback(pa_stream *s, void *userdata) {
-
-#ifdef USE_THREADED_GLLOOP
+#ifdef USE_THREADED_PALOOP
     if (PVCApplication::isQuitting()) {
         return;
     }
@@ -406,7 +416,7 @@ static void read_callback(pa_stream *s, size_t length, void *userdata) {
     const void *data;
     double v;
 
-#ifdef USE_THREADED_GLLOOP
+#ifdef USE_THREADED_PALOOP
     if (PVCApplication::isQuitting()) {
         return;
     }
@@ -446,7 +456,7 @@ pa_stream* MainWindow::createMonitorStreamForSource(uint32_t source_idx, uint32_
     pa_sample_spec ss;
     pa_stream_flags_t flags;
 
-#ifdef USE_THREADED_GLLOOP
+#ifdef USE_THREADED_PALOOP
     // just checking to be certain
     if (QThread::currentThread() != pvcApp->mainThread) {
         qWarning() << Q_FUNC_INFO << "thread" << QThread::currentThread() << "!= mainThread" << pvcApp->mainThread;
@@ -907,6 +917,9 @@ void MainWindow::updateVolumeMeter(uint32_t source_index, uint32_t sink_input_id
 static guint idle_source = 0;
 
 gboolean idle_cb(gpointer data) {
+#ifdef DEBUG
+    qWarning() << Q_FUNC_INFO << idleTimer.elapsed() / 1000.0;
+#endif
     ((MainWindow*) data)->reallyUpdateDeviceVisibility();
     idle_source = 0;
     return FALSE;
@@ -926,11 +939,39 @@ void MainWindow::setConnectionState(gboolean connected) {
 }
 
 void MainWindow::updateDeviceVisibility() {
+    static bool active = false;
 
+#ifdef DEBUG
+    if (active) {
+        qWarning() << Q_FUNC_INFO << (idle_source ? "called recursively" : "call can't happen");
+    }
+#endif
     if (idle_source)
         return;
-
+#ifdef DEBUG
+    idleTimer.restart();
+#endif
+#ifdef USE_THREADED_PALOOP
+    // Contrary to what the use of `g_idle_add()` in the non-threaded implementation suggests,
+    // idle_cb does NOT have to be executed on the pa_??_mainloop, but on the main thread.
+    // There is no mechanism to register `idle_cb` as a callback for the pa_threaded_mainloop
+    // (which is NOT GLib-based!) so we don't have to worry about threading and GUI actions,
+    // as long as we're on the main thread.
+    if (QThread::currentThread() == pvcApp->mainThread) {
+        active = true;
+        idle_source = 1;
+        // Do the Qt equivalent of having idle_cb() execute when the event pump is idle:
+        pvcApp->sendPostedEvents(nullptr, 0);
+        pvcApp->eventDispatcher()->processEvents(QEventLoop::AllEvents);
+        idle_cb(this);
+        active = false;
+    } else {
+        qWarning() << Q_FUNC_INFO << "called on the wrong thread!";
+    }
+#else
+    Q_UNUSED(active);
     idle_source = g_idle_add(idle_cb, this);
+#endif
 }
 
 void MainWindow::reallyUpdateDeviceVisibility() {
