@@ -108,11 +108,14 @@ void show_error(const char *txt) {
     qApp->quit();
 }
 
+/* Forward Declarations */
 void ext_stream_restore_read_cb(
         pa_context *,
         const pa_ext_stream_restore_info *i,
         int eol,
         void *userdata);
+
+gboolean connect_to_pulse(gpointer userdata);
 
 #if HAVE_EXT_DEVICE_RESTORE_API
 void ext_device_restore_read_cb(
@@ -140,7 +143,6 @@ PVCApplication::PVCApplication(int &argc, char **argv)
    // I'd prefer to initialise PVCApplication::quitting elsewhere
    // but that would require C++17 apparently (instead of C++11).
     quitting = false;
-    gContext = g_main_context_default();
     const auto dispatcher = eventDispatcher();
     hasGlib = dispatcher && dispatcher->inherits("QEventDispatcherGlib");
     qDebug() << Q_FUNC_INFO << "eventDispatcher:" << dispatcher << "hasGlib:" << hasGlib;
@@ -194,6 +196,12 @@ void PVCApplication::reset()
     w->setConnectionState(false);
     w->removeAllWidgets();
     w->updateDeviceVisibility();
+}
+
+void PVCApplication::reconnect()
+{
+    qDebug() << Q_FUNC_INFO << "!";
+    QTimer::singleShot(reconnect_timeout * 1000, [=](){ connect_to_pulse(this); });
 }
 
 void PVCApplication::willQuit()
@@ -655,9 +663,6 @@ void subscribe_cb(pa_context *c, pa_subscription_event_type_t t, uint32_t index,
     }
 }
 
-/* Forward Declaration */
-gboolean connect_to_pulse(gpointer userdata);
-
 void context_state_callback(pa_context *c, void *userdata) {
 
     g_assert(c);
@@ -798,7 +803,10 @@ void context_state_callback(pa_context *c, void *userdata) {
 
             if (reconnect_timeout > 0) {
                 qWarning() << QObject::tr("Connection failed, attempting reconnect").toUtf8().constData();
-                g_timeout_add_seconds(reconnect_timeout, connect_to_pulse, userdata);
+//                 g_timeout_add_seconds(reconnect_timeout, connect_to_pulse, userdata);
+                // the reconnection attempt has to be performed on the main thread, but no need
+                // to use a synchronous call to a lambda expression here.
+                QMetaObject::invokeMethod(pvcApp, "reconnect", Qt::QueuedConnection);
             }
             return;
 
@@ -854,29 +862,31 @@ gboolean connect_to_pulse(gpointer userdata) {
                 reconnect_timeout = -1;
                 qApp->quit();
             } else {
-                qDebug("%s", QObject::tr("Connection failed, attempting reconnect").toUtf8().constData());
+                qWarning("%s", QObject::tr("Connection failed, attempting reconnect").toUtf8().constData());
                 reconnect_timeout = 5;
-                g_timeout_add_seconds(reconnect_timeout, connect_to_pulse, userdata);
+//                 g_timeout_add_seconds(reconnect_timeout, connect_to_pulse, userdata);
+                pvcApp->reconnect();
             }
         }
     } else {
         // start (or pump) the GLib context until we've connected, before entering the Qt main loop.
         // Not necessary, but eliminates some GUI glitching on opening
 #ifdef USE_THREADED_PALOOP
-            if (pa_threaded_mainloop_start(pvcApp->paMainLoop()) >= 0)
-            {
-                for (;;)
-                {
-                    pa_context_state_t state = pa_context_get_state(context);
-                    if (state == PA_CONTEXT_READY || !PA_CONTEXT_IS_GOOD(state))
-                        break;
-                    pa_threaded_mainloop_wait(pvcApp->paMainLoop());
-                }
+        static bool isRunning = false;
+        if (!isRunning && pa_threaded_mainloop_start(pvcApp->paMainLoop()) >= 0) {
+            isRunning = true;
+        }
+        if (isRunning) {
+            for (;;) {
+                pa_context_state_t state = pa_context_get_state(context);
+                if (state == PA_CONTEXT_READY || !PA_CONTEXT_IS_GOOD(state))
+                    break;
+                pa_threaded_mainloop_wait(pvcApp->paMainLoop());
             }
+        }
 #else
         auto gContext = g_main_context_default();
-        for (;;)
-        {
+        for (;;) {
             pa_context_state_t state = pa_context_get_state(context);
             if (state == PA_CONTEXT_READY || !PA_CONTEXT_IS_GOOD(state))
                 break;

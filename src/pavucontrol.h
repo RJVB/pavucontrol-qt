@@ -149,6 +149,7 @@ public slots:
     void removeAllWidgets();
     void updateDeviceVisibility();
     void reset();
+    void reconnect();
     void willQuit();
 
     // implementations of libpulse callback functions:
@@ -183,7 +184,6 @@ public:
     // keep our own cached thread pointer to save on some function calls
     const QThread *mainThread = nullptr;
 private:
-    GMainContext *gContext;
     bool hasGlib;
 
     MainWindow *w;
