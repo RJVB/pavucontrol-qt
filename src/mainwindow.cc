@@ -1144,17 +1144,24 @@ void MainWindow::removeClient(uint32_t index) {
 
 void MainWindow::removeAllWidgets() {
     for (auto & sinkInputWidget : sinkInputWidgets)
-        removeSinkInput(sinkInputWidget.first);
+        delete sinkInputWidget.second;
+    sinkInputWidgets.clear();
     for (auto & sourceOutputWidget : sourceOutputWidgets)
-        removeSourceOutput(sourceOutputWidget.first);
+        delete sourceOutputWidget.second;
+    sourceOutputWidgets.clear();
     for (auto & sinkWidget : sinkWidgets)
-        removeSink(sinkWidget.first);
+        delete sinkWidget.second;
+    sinkWidgets.clear();
     for (auto & sourceWidget : sourceWidgets)
-        removeSource(sourceWidget.first);
+        delete sourceWidget.second;
+    sourceWidgets.clear();
     for (auto & cardWidget : cardWidgets)
-       removeCard(cardWidget.first);
-    for (auto & clientName : clientNames)
-        removeClient(clientName.first);
+        delete cardWidget.second;
+    cardWidgets.clear();
+    for (auto & clientName : clientNames) {
+        g_free(clientName.second);
+    }
+    clientNames.clear();
     deleteEventRoleWidget();
 }
 

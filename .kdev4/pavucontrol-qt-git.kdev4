@@ -2,8 +2,10 @@
 BuildItems=@Variant(\x00\x00\x00\t\x00\x00\x00\x00\x00)
 
 [CMake]
-Build Directory Count=1
+Build Directory Count=2
 Current Build Directory Index=0
+Current Build Directory Index-Host System=1
+Temporary Build Directory Index=1
 
 [CMake][CMake Build Directory 0]
 Build Directory Path=/home/bertin/work/src/Scratch/multimedia/qtpavucontrol-lnx-work/build
@@ -12,6 +14,16 @@ CMake Binary=/opt/local/bin/cmake2port_noserver
 CMake Executable=/opt/local/bin/cmake2port_noserver
 Environment Profile=
 Extra Arguments=-nvok --port pavucontrol-qt5 --variants +LTO+cpucompat --configure.optflags "-Ofast" configure.compiler=macports-gcc-12 configureccache=yes
+Install Directory=/opt/local
+Runtime=Host System
+
+[CMake][CMake Build Directory 1]
+Build Directory Path=/Users/bertin/work/src/new/multimedia/qtpavucontrol-mp9-work/build
+Build Type=MacPorts
+CMake Binary=/opt/local/bin/cmake2port_noserver
+CMake Executable=/opt/local/bin/cmake2port_noserver
+Environment Profile=
+Extra Arguments=-nvok --port pavucontrol-qt5 --variants +debug+cputuned --configure.optflags "-O1 -g" configure.compiler=macports-clang-9.0 configureccache=yes
 Install Directory=/opt/local
 Runtime=Host System
 
@@ -24,7 +36,7 @@ parserArgumentsCuda=-ferror-limit=100 -fspell-checking -Wdocumentation -Wunused-
 parserArgumentsOpenCL=-ferror-limit=100 -fspell-checking -Wdocumentation -Wunused-parameter -Wunreachable-code -Wall -cl-std=CL1.1
 
 [CustomDefinesAndIncludes][ProjectPath0][Compiler]
-Name=gcc-mp-12
+Name=clang-9.0
 
 [CustomDefinesAndIncludes][ProjectPath0][Includes]
 1=/opt/local/include/qt5
@@ -33,6 +45,7 @@ Name=gcc-mp-12
 4=/opt/local/include/qt5/QtGui/
 5=/opt/local/include/qt5/QtCore
 6=/home/bertin/work/src/Scratch/multimedia/pavucontrol-qt-git/../qtpavucontrol-lnx-work/build/src/pavucontrol-qt_autogen/include/
+7=/Users/bertin/work/src/new/multimedia/pavucontrol-qt-git/src
 
 [Launch]
 Launch Configurations=Launch Configuration 0
@@ -58,11 +71,11 @@ VersionControlSupport=kdevgit
 [SourceFormatter]
 OverrideKateIndentation=true
 UseDefault=false
-text/x-c++hdr=kdevastyle||User4
-text/x-c++src=kdevastyle||User4
-text/x-chdr=kdevastyle||User4
+text/x-c++hdr=kdevastyle||User2
+text/x-c++src=kdevastyle||User2
+text/x-chdr=kdevastyle||User2
 text/x-csharp=kdevastyle||1TBS
-text/x-csrc=kdevastyle||User4
+text/x-csrc=kdevastyle||User2
 text/x-java=kdevastyle||1TBS
 text/x-objc++src=kdevastyle||User4
 text/x-objchdr=kdevastyle||1TBS

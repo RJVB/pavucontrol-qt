@@ -190,6 +190,7 @@ void PVCApplication::updateDeviceVisibility()
 
 void PVCApplication::reset()
 {
+    qDebug() << Q_FUNC_INFO << "!";
     w->setConnectionState(false);
     w->removeAllWidgets();
     w->updateDeviceVisibility();
