@@ -20,11 +20,15 @@ include(FeatureSummary)
 
 # Minimum Versions
 set(GLIB_MINIMUM_VERSION "2.50.0")
-set(LXQTBT_MINIMUM_VERSION "0.13.0")
+# set(LXQTBT_MINIMUM_VERSION "0.13.0")
 set(QT_MINIMUM_VERSION "5.6.3")
 
 find_package(Qt5 ${QT_MINIMUM_VERSION} COMPONENTS Widgets LinguistTools REQUIRED)
-find_package(lxqt-build-tools ${LXQTBT_MINIMUM_VERSION} REQUIRED)
+# find_package(lxqt-build-tools ${LXQTBT_MINIMUM_VERSION} REQUIRED)
+# we include our own copies of the lxqt-build-tools modules (only FindGLIB and the
+# translation ones are really required for now). This makes us independent of the
+# hardwired Qt version requireement in the upstream lxqt-build-modules.
+set(LXQT_CMAKE_MODULES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 find_package(GLIB ${GLIB_MINIMUM_VERSION} REQUIRED)
 
